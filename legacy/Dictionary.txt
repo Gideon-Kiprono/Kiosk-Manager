@@ -1,0 +1,5 @@
+Pen,65,18
+Books,80,105
+Print Papers,160,10
+Sets,200,30
+Calculator,1000,12
