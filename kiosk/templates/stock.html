@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t.stock_title }}</h1>
+
+<form class="search" method="get" action="{{ url_for('stock') }}">
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ t.search_placeholder }}" aria-label="{{ t.search_button }}">
+  <button type="submit">{{ t.search_button }}</button>
+</form>
+{% if q %}<p><a href="{{ url_for('stock') }}">{{ t.clear_search }}</a></p>{% endif %}
+
+{% if products %}
+<table>
+  <thead><tr><th>{{ t.col_product }}</th><th class="num">{{ t.col_price }}</th><th class="num">{{ t.col_qty }}</th></tr></thead>
+  <tbody>
+  {% for p in products %}
+    <tr>
+      <td>{{ p.name }}
+        {% if p.quantity == 0 %}<span class="tag out">{{ t.out }}</span>
+        {% elif p.quantity <= 5 %}<span class="tag low">{{ t.low }}</span>{% endif %}
+      </td>
+      <td class="num">{{ p.price | kes }}</td>
+      <td class="num">{{ p.quantity }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% elif q %}
+  <p class="empty">{{ t.no_matches }}</p>
+{% else %}
+  <p class="empty">{{ t.no_products }}</p>
+{% endif %}
+{% endblock %}

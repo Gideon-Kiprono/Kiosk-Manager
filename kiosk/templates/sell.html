@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t.sell_title }}</h1>
+{% if products %}
+<form method="post">
+  <label for="product">{{ t.choose_product }}</label>
+  <select id="product" name="product" required>
+    <option value="" disabled selected>—</option>
+    {% for p in products %}
+      <option value="{{ p.name }}">{{ p.name }} · KES {{ p.price | kes }} · {{ p.quantity }} {{ t.left }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="quantity">{{ t.quantity }}</label>
+  <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1" required>
+
+  <button type="submit" class="primary">{{ t.sell_button }}</button>
+</form>
+{% else %}
+  <p class="empty">{{ t.nothing_to_sell }}</p>
+{% endif %}
+{% endblock %}
