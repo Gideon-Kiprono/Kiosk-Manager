@@ -5,7 +5,21 @@ from kiosk.db import init_db
 
 
 class KioskError(Exception):
-    """A rule was broken (bad input, not enough stock, unknown product)."""
+    """A rule was broken. Carries a code + params so the UI can translate it."""
+
+    MESSAGES = {
+        "invalid_name": "Please enter a valid product name.",
+        "invalid_number": "{field} must be a whole number greater than 0.",
+        "unknown_product": "{name} is not available in the inventory.",
+        "not_enough": "Not enough stock. Only {available} units available.",
+        "price_required": "{name} is new, so a price is required.",
+        "empty_search": "Please type something to search for.",
+    }
+
+    def __init__(self, code, **params):
+        self.code = code
+        self.params = params
+        super().__init__(self.MESSAGES[code].format(**{"field": "", **params}))
 
 
 # ---------- helpers ----------
@@ -13,14 +27,14 @@ class KioskError(Exception):
 def clean_name(raw):
     name = " ".join(str(raw).split()).title()     # strip + collapse spaces + Title Case
     if name == "" or name.isdigit():
-        raise KioskError("Please enter a valid product name.")
+        raise KioskError("invalid_name")
     return name
 
 
-def positive_int(value, label):
+def positive_int(value, field):
     text = str(value).strip()
     if not text.isdigit() or int(text) <= 0:
-        raise KioskError(f"{label} must be a whole number greater than 0.")
+        raise KioskError("invalid_number", field=field)
     return int(text)
 
 
@@ -37,7 +51,7 @@ def get_product(conn, name):
 def add_or_restock(conn, name, quantity, price=None):
     """Restock an existing product, or add a new one (price required)."""
     name = clean_name(name)
-    quantity = positive_int(quantity, "Quantity")
+    quantity = positive_int(quantity, "quantity")
     product = conn.execute("SELECT * FROM products WHERE name = ?", (name,)).fetchone()
 
     if product:
@@ -46,8 +60,8 @@ def add_or_restock(conn, name, quantity, price=None):
         action = "restocked"
     else:
         if price is None:
-            raise KioskError(f"{name} is new, so a price is required.")
-        price = positive_int(price, "Price")
+            raise KioskError("price_required", name=name)
+        price = positive_int(price, "price")
         conn.execute("INSERT INTO products (name, price, quantity) VALUES (?, ?, ?)",
                      (name, price, quantity))
         action = "added"
@@ -58,7 +72,7 @@ def add_or_restock(conn, name, quantity, price=None):
 def search_products(conn, term):
     term = str(term).strip().lower()
     if term == "":
-        raise KioskError("Please type something to search for.")
+        raise KioskError("empty_search")
     return conn.execute(
         "SELECT * FROM products WHERE lower(name) LIKE ? ORDER BY name",
         (f"%{term}%",)).fetchall()
@@ -68,12 +82,12 @@ def search_products(conn, term):
 
 def sell(conn, name, quantity):
     name = clean_name(name)
-    quantity = positive_int(quantity, "Quantity")
+    quantity = positive_int(quantity, "quantity")
     product = conn.execute("SELECT * FROM products WHERE name = ?", (name,)).fetchone()
     if product is None:
-        raise KioskError(f"{name} is not available in the inventory.")
+        raise KioskError("unknown_product", name=name)
     if quantity > product["quantity"]:
-        raise KioskError(f"Not enough stock. Only {product['quantity']} units available.")
+        raise KioskError("not_enough", available=product["quantity"])
 
     total = quantity * product["price"]
     # One transaction: stock and sale change together, or not at all.
@@ -86,10 +100,15 @@ def sell(conn, name, quantity):
     return {"product": name, "quantity": quantity, "total": total}
 
 
-def sales_report(conn, date_from=None):
-    """Totals and best seller. date_from is 'YYYY-MM-DD' (inclusive) or None for all time."""
-    where, params = ("WHERE date(sold_at) >= ?", (date_from,)) if date_from else ("", ())
-    sales = conn.execute(f"SELECT * FROM sales {where} ORDER BY id", params).fetchall()
+def sales_report(conn, date_from=None, tz_hours=0):
+    """Totals and best seller. date_from is 'YYYY-MM-DD' (inclusive, in local time) or None.
+    Sales are stored in UTC; tz_hours shifts them to the kiosk's local time (Nairobi = 3)."""
+    shift = f"{tz_hours:+d} hours"
+    where = "WHERE date(sold_at, ?) >= ?" if date_from else ""
+    params = (shift, date_from) if date_from else ()
+    sales = conn.execute(
+        f"SELECT *, datetime(sold_at, ?) AS local_time FROM sales {where} ORDER BY id DESC",
+        (shift, *params)).fetchall()
 
     units = {}
     for sale in sales:

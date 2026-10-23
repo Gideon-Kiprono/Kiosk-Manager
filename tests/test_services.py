@@ -12,6 +12,9 @@ class ServiceTests(unittest.TestCase):
         services.add_or_restock(self.conn, "pen", 20, price=65)
         services.add_or_restock(self.conn, "books", 15, price=80)
 
+    def tearDown(self):
+        self.conn.close()
+
     def qty(self, name):
         return services.get_product(self.conn, name)["quantity"]
 
