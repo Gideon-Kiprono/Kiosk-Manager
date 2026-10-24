@@ -1,64 +1,134 @@
+import os
+import re
+import tempfile
 import unittest
 
-from kiosk import services
-from kiosk.db import get_connection
 from kiosk.web import create_app
 
 
 class WebTests(unittest.TestCase):
     def setUp(self):
-        import tempfile, os
         self.dir = tempfile.TemporaryDirectory()
-        self.path = os.path.join(self.dir.name, "t.db")
-        self.app = create_app(self.path, testing=True)
+        self.app = create_app(os.path.join(self.dir.name, "t.db"), testing=True)
         self.client = self.app.test_client()
-        conn = get_connection(self.path)
-        services.add_or_restock(conn, "books", 15, price=80)
-        services.add_or_restock(conn, "pen", 3, price=65)
-        conn.close()
 
     def tearDown(self):
         self.dir.cleanup()
 
-    def test_pages_load_in_swahili(self):
-        for url, word in [("/", "Bidhaa zilizopo"), ("/uza", "Uza bidhaa"),
-                          ("/ongeza", "Ongeza au jaza stoo"), ("/ripoti", "Ripoti ya mauzo")]:
+    # --- helpers ---
+    def token(self, client=None):
+        client = client or self.client
+        client.get("/ingia")
+        with client.session_transaction() as s:
+            return s["csrf"]
+
+    def post(self, url, data=None, client=None):
+        client = client or self.client
+        data = dict(data or {}, csrf_token=self.token(client))
+        return client.post(url, data=data, follow_redirects=True)
+
+    def text(self, resp):
+        return resp.get_data(as_text=True)
+
+    def signup(self, email="a@example.com", kiosk="Duka A", client=None):
+        return self.post("/jisajili", {"email": email, "password": "password123",
+                                       "kiosk_name": kiosk}, client)
+
+    def stock_item(self, name, qty, price, client=None):
+        return self.post("/ongeza", {"name": name, "quantity": qty, "price": price}, client)
+
+    # --- access control ---
+    def test_pages_require_login(self):
+        for url in ["/", "/uza", "/ongeza", "/ripoti"]:
             r = self.client.get(url)
-            self.assertEqual(r.status_code, 200)
-            self.assertIn(word, r.get_data(as_text=True))
+            self.assertEqual(r.status_code, 302, url)
+            self.assertIn("/ingia", r.headers["Location"])
 
-    def test_low_stock_tag(self):
-        self.assertIn("Inaisha", self.client.get("/").get_data(as_text=True))
+    def test_post_without_csrf_token_is_rejected(self):
+        self.signup()
+        r = self.client.post("/uza", data={"product": "Pen", "quantity": "1"}, follow_redirects=True)
+        self.assertIn("Ombi halikuthibitishwa", self.text(r))
 
-    def test_search(self):
-        html = self.client.get("/?q=boo").get_data(as_text=True)
-        self.assertIn("Books", html)
-        self.assertNotIn("Pen", html.split("<tbody>")[1])
+    # --- accounts ---
+    def test_register_shows_welcome_and_kiosk_name(self):
+        html = self.text(self.signup())
+        self.assertIn("Karibu, Duka A!", html)
+        self.assertIn("Bidhaa zilizopo", html)
 
-    def test_sell_success_and_report(self):
-        r = self.client.post("/uza", data={"product": "Books", "quantity": "5"}, follow_redirects=True)
-        self.assertIn("Umeuza 5 Books kwa KES 400", r.get_data(as_text=True))
-        report = self.client.get("/ripoti").get_data(as_text=True)
-        self.assertIn("KES 400", report)
+    def test_duplicate_and_weak_registration(self):
+        self.signup()
+        other = self.app.test_client()
+        self.assertIn("tayari imesajiliwa", self.text(self.signup(client=other)))
+        r = self.post("/jisajili", {"email": "b@example.com", "password": "123", "kiosk_name": "X"}, other)
+        self.assertIn("angalau 8", self.text(r))
 
-    def test_oversell_shows_swahili_error(self):
-        r = self.client.post("/uza", data={"product": "Pen", "quantity": "99"}, follow_redirects=True)
-        self.assertIn("Stoo haitoshi. Zimebaki 3 tu.", r.get_data(as_text=True))
+    def test_login_logout_cycle(self):
+        self.signup()
+        self.assertIn("Umetoka", self.text(self.post("/toka")))
+        self.assertEqual(self.client.get("/").status_code, 302)
+        r = self.post("/ingia", {"email": "a@example.com", "password": "password123"})
+        self.assertIn("Karibu, Duka A!", self.text(r))
 
-    def test_bad_quantity_shows_error_not_crash(self):
-        r = self.client.post("/uza", data={"product": "Pen", "quantity": "abc"}, follow_redirects=True)
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("Idadi lazima", r.get_data(as_text=True))
+    def test_wrong_password_message(self):
+        self.signup()
+        self.post("/toka")
+        r = self.post("/ingia", {"email": "a@example.com", "password": "nope-nope"})
+        self.assertIn("si sahihi", self.text(r))
 
-    def test_add_new_needs_price_then_succeeds(self):
-        r = self.client.post("/ongeza", data={"name": "chai", "quantity": "10", "price": ""}, follow_redirects=True)
-        self.assertIn("ni bidhaa mpya, weka bei", r.get_data(as_text=True))
-        r = self.client.post("/ongeza", data={"name": "chai", "quantity": "10", "price": "50"}, follow_redirects=True)
-        self.assertIn("Chai imeongezwa", r.get_data(as_text=True))
+    def test_login_lockout_after_five_failures(self):
+        self.signup()
+        self.post("/toka")
+        for _ in range(5):
+            self.post("/ingia", {"email": "a@example.com", "password": "wrong-pass"})
+        r = self.post("/ingia", {"email": "a@example.com", "password": "password123"})
+        self.assertIn("Subiri dakika 15", self.text(r))
 
-    def test_restock(self):
-        r = self.client.post("/ongeza", data={"name": "pen", "quantity": "7"}, follow_redirects=True)
-        self.assertIn("Pen imejazwa. Idadi mpya: 10", r.get_data(as_text=True))
+    def test_demo_account(self):
+        html = self.text(self.post("/demo"))
+        self.assertIn("Duka la Demo", html)
+        self.assertIn("Mkate", html)
+
+    # --- data isolation ---
+    def test_kiosks_cannot_see_each_others_data(self):
+        self.signup("a@example.com", "Duka A")
+        self.stock_item("Pen", "10", "65")
+        other = self.app.test_client()
+        self.signup("b@example.com", "Duka B", client=other)
+        self.assertNotIn("Pen", self.text(other.get("/")))
+        r = self.post("/uza", {"product": "Pen", "quantity": "1"}, other)
+        self.assertIn("haipo kwenye stoo", self.text(r))
+        self.assertIn("Pen", self.text(self.client.get("/")))
+
+    # --- the kiosk features (as before, now behind login) ---
+    def test_sell_report_and_low_stock(self):
+        self.signup()
+        self.stock_item("Books", "15", "80")
+        self.stock_item("Pen", "3", "65")
+        self.assertIn("Inaisha", self.text(self.client.get("/")))
+        r = self.post("/uza", {"product": "Books", "quantity": "5"})
+        self.assertIn("Umeuza 5 Books kwa KES 400", self.text(r))
+        self.assertIn("KES 400", self.text(self.client.get("/ripoti")))
+
+    def test_errors_are_swahili_not_crashes(self):
+        self.signup()
+        self.stock_item("Pen", "3", "65")
+        self.assertIn("Zimebaki 3 tu", self.text(self.post("/uza", {"product": "Pen", "quantity": "99"})))
+        self.assertIn("Idadi lazima", self.text(self.post("/uza", {"product": "Pen", "quantity": "abc"})))
+        self.assertIn("weka bei", self.text(self.post("/ongeza", {"name": "Chai", "quantity": "5", "price": ""})))
+
+    def test_search_and_restock(self):
+        self.signup()
+        self.stock_item("Books", "15", "80")
+        self.stock_item("Pen", "3", "65")
+        body = self.text(self.client.get("/?q=boo")).split("<tbody>")[1]
+        self.assertIn("Books", body)
+        self.assertNotIn("Pen", body)
+        self.assertIn("Idadi mpya: 10", self.text(self.post("/ongeza", {"name": "pen", "quantity": "7"})))
+
+    def test_security_headers_present(self):
+        h = self.client.get("/ingia").headers
+        self.assertEqual(h["X-Frame-Options"], "DENY")
+        self.assertIn("default-src 'self'", h["Content-Security-Policy"])
 
 
 if __name__ == "__main__":
