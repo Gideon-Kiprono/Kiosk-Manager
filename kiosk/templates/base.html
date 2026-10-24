@@ -3,11 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{{ kiosk_name }}{% endblock %} · {{ t.app_name }}</title>
+  <title>{{ t.app_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="top"><strong>{{ kiosk_name }}</strong></header>
+  <header class="top">
+    <strong>{{ user.kiosk_name if user else t.app_name }}</strong>
+    {% if user %}
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="link">{{ t.logout }}</button>
+    </form>
+    {% endif %}
+  </header>
 
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -18,11 +26,13 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% if user %}
   <nav class="tabs">
     <a href="{{ url_for('stock') }}"  class="{{ 'on' if request.endpoint == 'stock' }}">{{ t.nav_stock }}</a>
     <a href="{{ url_for('sell') }}"   class="{{ 'on' if request.endpoint == 'sell' }}">{{ t.nav_sell }}</a>
     <a href="{{ url_for('add') }}"    class="{{ 'on' if request.endpoint == 'add' }}">{{ t.nav_add }}</a>
     <a href="{{ url_for('report') }}" class="{{ 'on' if request.endpoint == 'report' }}">{{ t.nav_report }}</a>
   </nav>
+  {% endif %}
 </body>
 </html>

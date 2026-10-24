@@ -3,6 +3,7 @@
 <h1>{{ t.sell_title }}</h1>
 {% if products %}
 <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="product">{{ t.choose_product }}</label>
   <select id="product" name="product" required>
     <option value="" disabled selected>—</option>

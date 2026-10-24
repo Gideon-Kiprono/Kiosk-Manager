@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ t.add_title }}</h1>
 <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="name">{{ t.product_name }}</label>
   <input id="name" name="name" type="text" list="known" autocomplete="off" required>
   <datalist id="known">
