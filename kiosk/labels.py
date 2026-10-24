@@ -56,6 +56,32 @@ SW = {
     "err_not_enough": "Stoo haitoshi. Zimebaki {available} tu.",
     "err_price_required": "{name} ni bidhaa mpya, weka bei.",
     "err_empty_search": "Andika kitu cha kutafuta.",
+
+    "login_title": "Ingia",
+    "email": "Barua pepe",
+    "password": "Nenosiri",
+    "password_hint": "Angalau herufi 8.",
+    "login_button": "Ingia",
+    "no_account": "Huna akaunti?",
+    "register_link": "Jisajili",
+    "register_title": "Fungua akaunti",
+    "kiosk_name_label": "Jina la duka",
+    "register_button": "Jisajili",
+    "have_account": "Tayari una akaunti?",
+    "demo_button": "Jaribu demo",
+    "demo_hint": "Jaribu bila kujisajili. Data ya demo hufutwa baada ya saa 24.",
+    "logout": "Toka",
+    "welcome_user": "Karibu, {kiosk}!",
+    "logged_out": "Umetoka.",
+    "or": "au",
+
+    "err_invalid_email": "Weka barua pepe sahihi.",
+    "err_weak_password": "Nenosiri liwe na herufi angalau 8.",
+    "err_email_taken": "Barua pepe hii tayari imesajiliwa.",
+    "err_bad_login": "Barua pepe au nenosiri si sahihi.",
+    "err_invalid_kiosk_name": "Weka jina la duka.",
+    "err_too_many_attempts": "Umejaribu mara nyingi. Subiri dakika 15.",
+    "err_csrf": "Ombi halikuthibitishwa. Jaribu tena.",
 }
 
 
