@@ -1,5 +1,7 @@
 """Business logic. No input() or print() here: functions take arguments and
-return values, so the same code can power a CLI, a website or the tests."""
+return values, so the same code can power a CLI, a website or the tests.
+
+Every function takes a user_id and only ever touches that user's rows."""
 
 from kiosk.db import init_db
 
@@ -14,6 +16,13 @@ class KioskError(Exception):
         "not_enough": "Not enough stock. Only {available} units available.",
         "price_required": "{name} is new, so a price is required.",
         "empty_search": "Please type something to search for.",
+        "invalid_email": "Please enter a valid email address.",
+        "weak_password": "Password must be at least 8 characters.",
+        "email_taken": "That email is already registered.",
+        "bad_login": "Wrong email or password.",
+        "invalid_kiosk_name": "Please enter a kiosk name.",
+        "too_many_attempts": "Too many attempts. Wait 15 minutes.",
+        "csrf": "The request could not be verified. Please try again.",
     }
 
     def __init__(self, code, **params):
@@ -40,50 +49,54 @@ def positive_int(value, field):
 
 # ---------- inventory ----------
 
-def list_products(conn):
-    return conn.execute("SELECT * FROM products ORDER BY name").fetchall()
+def list_products(conn, user_id):
+    return conn.execute("SELECT * FROM products WHERE user_id = ? ORDER BY name",
+                        (user_id,)).fetchall()
 
 
-def get_product(conn, name):
-    return conn.execute("SELECT * FROM products WHERE name = ?", (clean_name(name),)).fetchone()
+def get_product(conn, user_id, name):
+    return conn.execute("SELECT * FROM products WHERE user_id = ? AND name = ?",
+                        (user_id, clean_name(name))).fetchone()
 
 
-def add_or_restock(conn, name, quantity, price=None):
+def add_or_restock(conn, user_id, name, quantity, price=None):
     """Restock an existing product, or add a new one (price required)."""
     name = clean_name(name)
     quantity = positive_int(quantity, "quantity")
-    product = conn.execute("SELECT * FROM products WHERE name = ?", (name,)).fetchone()
+    product = conn.execute("SELECT * FROM products WHERE user_id = ? AND name = ?",
+                           (user_id, name)).fetchone()
 
     if product:
-        conn.execute("UPDATE products SET quantity = quantity + ? WHERE id = ?",
-                     (quantity, product["id"]))
+        conn.execute("UPDATE products SET quantity = quantity + ? WHERE id = ? AND user_id = ?",
+                     (quantity, product["id"], user_id))
         action = "restocked"
     else:
         if price is None:
             raise KioskError("price_required", name=name)
         price = positive_int(price, "price")
-        conn.execute("INSERT INTO products (name, price, quantity) VALUES (?, ?, ?)",
-                     (name, price, quantity))
+        conn.execute("INSERT INTO products (user_id, name, price, quantity) VALUES (?, ?, ?, ?)",
+                     (user_id, name, price, quantity))
         action = "added"
     conn.commit()
-    return action, get_product(conn, name)
+    return action, get_product(conn, user_id, name)
 
 
-def search_products(conn, term):
+def search_products(conn, user_id, term):
     term = str(term).strip().lower()
     if term == "":
         raise KioskError("empty_search")
     return conn.execute(
-        "SELECT * FROM products WHERE lower(name) LIKE ? ORDER BY name",
-        (f"%{term}%",)).fetchall()
+        "SELECT * FROM products WHERE user_id = ? AND lower(name) LIKE ? ORDER BY name",
+        (user_id, f"%{term}%")).fetchall()
 
 
 # ---------- sales ----------
 
-def sell(conn, name, quantity):
+def sell(conn, user_id, name, quantity):
     name = clean_name(name)
     quantity = positive_int(quantity, "quantity")
-    product = conn.execute("SELECT * FROM products WHERE name = ?", (name,)).fetchone()
+    product = conn.execute("SELECT * FROM products WHERE user_id = ? AND name = ?",
+                           (user_id, name)).fetchone()
     if product is None:
         raise KioskError("unknown_product", name=name)
     if quantity > product["quantity"]:
@@ -92,23 +105,27 @@ def sell(conn, name, quantity):
     total = quantity * product["price"]
     # One transaction: stock and sale change together, or not at all.
     with conn:
-        conn.execute("UPDATE products SET quantity = quantity - ? WHERE id = ?",
-                     (quantity, product["id"]))
+        conn.execute("UPDATE products SET quantity = quantity - ? WHERE id = ? AND user_id = ?",
+                     (quantity, product["id"], user_id))
         conn.execute(
-            "INSERT INTO sales (product_id, product_name, quantity, total) VALUES (?, ?, ?, ?)",
-            (product["id"], name, quantity, total))
+            "INSERT INTO sales (user_id, product_id, product_name, quantity, total) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, product["id"], name, quantity, total))
     return {"product": name, "quantity": quantity, "total": total}
 
 
-def sales_report(conn, date_from=None, tz_hours=0):
+def sales_report(conn, user_id, date_from=None, tz_hours=0):
     """Totals and best seller. date_from is 'YYYY-MM-DD' (inclusive, in local time) or None.
     Sales are stored in UTC; tz_hours shifts them to the kiosk's local time (Nairobi = 3)."""
     shift = f"{tz_hours:+d} hours"
-    where = "WHERE date(sold_at, ?) >= ?" if date_from else ""
-    params = (shift, date_from) if date_from else ()
+    where = "WHERE user_id = ?"
+    params = [shift, user_id]
+    if date_from:
+        where += " AND date(sold_at, ?) >= ?"
+        params += [shift, date_from]
     sales = conn.execute(
         f"SELECT *, datetime(sold_at, ?) AS local_time FROM sales {where} ORDER BY id DESC",
-        (shift, *params)).fetchall()
+        params).fetchall()
 
     units = {}
     for sale in sales:
@@ -123,21 +140,30 @@ def sales_report(conn, date_from=None, tz_hours=0):
     }
 
 
-def low_stock(conn, limit=5):
-    return conn.execute("SELECT * FROM products WHERE quantity <= ? ORDER BY quantity, name",
-                        (limit,)).fetchall()
+def low_stock(conn, user_id, limit=5):
+    return conn.execute(
+        "SELECT * FROM products WHERE user_id = ? AND quantity <= ? ORDER BY quantity, name",
+        (user_id, limit)).fetchall()
 
 
 # ---------- one-off migration from the original text files ----------
 
-def import_legacy(conn, inventory_path, sales_path=None):
-    """Load Dictionary.txt (name,price,quantity) and optionally sales_log.txt."""
+def import_legacy(conn, inventory_path, user_id=None):
+    """Load Dictionary.txt (name,price,quantity). With user_id=None the rows are
+    'unclaimed' and the first account to register takes them over."""
     init_db(conn)
     with open(inventory_path) as f:
         for line in f:
-            if line.strip():
-                name, price, qty = line.strip().split(",")
-                conn.execute(
-                    "INSERT OR REPLACE INTO products (name, price, quantity) VALUES (?, ?, ?)",
-                    (clean_name(name), int(float(price)), int(qty)))
+            if not line.strip():
+                continue
+            name, price, qty = line.strip().split(",")
+            name, price, qty = clean_name(name), int(float(price)), int(qty)
+            exists = conn.execute("SELECT id FROM products WHERE user_id IS ? AND name = ?",
+                                  (user_id, name)).fetchone()
+            if exists:
+                conn.execute("UPDATE products SET price = ?, quantity = ? WHERE id = ?",
+                             (price, qty, exists["id"]))
+            else:
+                conn.execute("INSERT INTO products (user_id, name, price, quantity) VALUES (?, ?, ?, ?)",
+                             (user_id, name, price, qty))
     conn.commit()
