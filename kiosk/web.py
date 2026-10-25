@@ -7,10 +7,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import (Flask, abort, flash, g, redirect, render_template, request,
+from flask import (Flask, Response, abort, flash, g, redirect, render_template, request,
                    session, url_for)
 
-from kiosk import auth, services
+from kiosk import auth, chart, services
 from kiosk.db import get_connection, init_db
 from kiosk.labels import SW, error_text
 from kiosk.services import KioskError
@@ -108,7 +108,7 @@ def create_app(db_path=None, testing=False):
     @app.route("/ingia", methods=["GET", "POST"])
     def login():
         if g.user:
-            return redirect(url_for("stock"))
+            return redirect(url_for("home"))
         if request.method == "POST":
             email = auth.normalise_email(request.form.get("email", ""))
             now = time.time()
@@ -121,7 +121,7 @@ def create_app(db_path=None, testing=False):
                 failed_logins.pop(email, None)
                 start_session(user["id"])
                 flash(SW["welcome_user"].format(kiosk=user["kiosk_name"]), "ok")
-                return redirect(url_for("stock"))
+                return redirect(url_for("home"))
             except KioskError as err:
                 if err.code == "bad_login":
                     failed_logins[email].append(now)
@@ -132,7 +132,7 @@ def create_app(db_path=None, testing=False):
     @app.route("/jisajili", methods=["GET", "POST"])
     def register():
         if g.user:
-            return redirect(url_for("stock"))
+            return redirect(url_for("home"))
         if request.method == "POST":
             try:
                 uid = auth.register(db(), request.form.get("email", ""),
@@ -141,7 +141,7 @@ def create_app(db_path=None, testing=False):
                 start_session(uid)
                 flash(SW["welcome_user"].format(
                     kiosk=auth.get_user(db(), uid)["kiosk_name"]), "ok")
-                return redirect(url_for("stock"))
+                return redirect(url_for("home"))
             except KioskError as err:
                 flash(error_text(err), "error")
                 return redirect(url_for("register"))
@@ -151,7 +151,7 @@ def create_app(db_path=None, testing=False):
     def demo():
         start_session(auth.create_demo(db()))
         flash(SW["welcome_user"].format(kiosk="Duka la Demo"), "ok")
-        return redirect(url_for("stock"))
+        return redirect(url_for("home"))
 
     @app.post("/toka")
     def logout():
@@ -161,7 +161,21 @@ def create_app(db_path=None, testing=False):
 
     # ---------- the kiosk pages (all need a login) ----------
 
+    def local_today():
+        return datetime.now(timezone(timedelta(hours=NAIROBI_HOURS))).date().isoformat()
+
     @app.get("/")
+    @login_required
+    def home():
+        days = services.daily_sales(db(), g.user["id"], local_today(), 7, NAIROBI_HOURS)
+        return render_template(
+            "home.html", days=days,
+            today_revenue=days[-1]["revenue"], week_revenue=sum(d["revenue"] for d in days),
+            chart_svg=chart.sales_bars(days, SW["chart_title"]),
+            day_label=chart.day_label,
+            low=services.low_stock(db(), g.user["id"]))
+
+    @app.get("/stoo")
     @login_required
     def stock():
         q = request.args.get("q", "").strip()
@@ -172,6 +186,43 @@ def create_app(db_path=None, testing=False):
             except KioskError as err:
                 flash(error_text(err), "error")
         return render_template("stock.html", products=products, q=q)
+
+    @app.route("/bidhaa/<int:product_id>/hariri", methods=["GET", "POST"])
+    @login_required
+    def edit_product(product_id):
+        product = services.get_product_by_id(db(), g.user["id"], product_id)
+        if product is None:
+            abort(404)
+        if request.method == "POST":
+            try:
+                services.update_product(db(), g.user["id"], product_id,
+                                        request.form.get("name", ""),
+                                        request.form.get("price", ""),
+                                        request.form.get("quantity", ""))
+                flash(SW["saved_ok"], "ok")
+                return redirect(url_for("stock"))
+            except KioskError as err:
+                flash(error_text(err), "error")
+                return redirect(url_for("edit_product", product_id=product_id))
+        return render_template("edit.html", p=product)
+
+    @app.post("/bidhaa/<int:product_id>/futa")
+    @login_required
+    def delete_product(product_id):
+        if not request.form.get("confirm"):
+            return redirect(url_for("edit_product", product_id=product_id))
+        try:
+            removed = services.remove_product(db(), g.user["id"], product_id)
+        except KioskError:
+            abort(404)
+        flash(SW["deleted_ok"].format(product=removed["name"]), "ok")
+        return redirect(url_for("stock"))
+
+    @app.get("/zinaisha")
+    @login_required
+    def shopping_list():
+        return render_template("shopping_list.html", low=services.low_stock(db(), g.user["id"]),
+                               today=local_today())
 
     @app.route("/uza", methods=["GET", "POST"])
     @login_required
@@ -203,16 +254,27 @@ def create_app(db_path=None, testing=False):
             except KioskError as err:
                 flash(error_text(err), "error")
             return redirect(url_for("add"))
-        return render_template("add.html", products=services.list_products(db(), g.user["id"]))
+        return render_template("add.html", products=services.list_products(db(), g.user["id"]),
+                               prefill=request.args.get("bidhaa", "")[:60])
 
     @app.get("/ripoti")
     @login_required
     def report():
         period = request.args.get("period", "today")
-        today = datetime.now(timezone(timedelta(hours=NAIROBI_HOURS))).date().isoformat()
         data = services.sales_report(
-            db(), g.user["id"], date_from=today if period == "today" else None,
+            db(), g.user["id"], date_from=local_today() if period == "today" else None,
             tz_hours=NAIROBI_HOURS)
         return render_template("report.html", r=data, period=period)
+
+    @app.get("/ripoti.csv")
+    @login_required
+    def report_csv():
+        period = request.args.get("period", "today")
+        body = services.export_sales_csv(
+            db(), g.user["id"], date_from=local_today() if period == "today" else None,
+            tz_hours=NAIROBI_HOURS, header=SW["csv_header"])
+        name = f"mauzo-{local_today()}.csv" if period == "today" else "mauzo-yote.csv"
+        return Response(body, mimetype="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     return app
