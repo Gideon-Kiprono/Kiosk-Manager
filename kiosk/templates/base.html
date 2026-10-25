@@ -28,11 +28,13 @@
 
   {% if user %}
   <nav class="tabs">
-    <a href="{{ url_for('stock') }}"  class="{{ 'on' if request.endpoint == 'stock' }}">{{ t.nav_stock }}</a>
+    <a href="{{ url_for('home') }}"   class="{{ 'on' if request.endpoint == 'home' }}">{{ t.nav_home }}</a>
+    <a href="{{ url_for('stock') }}"  class="{{ 'on' if request.endpoint in ('stock', 'edit_product') }}">{{ t.nav_stock }}</a>
     <a href="{{ url_for('sell') }}"   class="{{ 'on' if request.endpoint == 'sell' }}">{{ t.nav_sell }}</a>
     <a href="{{ url_for('add') }}"    class="{{ 'on' if request.endpoint == 'add' }}">{{ t.nav_add }}</a>
     <a href="{{ url_for('report') }}" class="{{ 'on' if request.endpoint == 'report' }}">{{ t.nav_report }}</a>
   </nav>
   {% endif %}
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t.edit_title }}</h1>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="name">{{ t.product_name }}</label>
+  <input id="name" name="name" type="text" value="{{ p.name }}" maxlength="60" required>
+
+  <label for="price">{{ t.price_label }}</label>
+  <input id="price" name="price" type="number" inputmode="numeric" min="1" step="1" value="{{ p.price }}" required>
+
+  <label for="quantity">{{ t.stock_label }}</label>
+  <input id="quantity" name="quantity" type="number" inputmode="numeric" min="0" step="1" value="{{ p.quantity }}" required>
+
+  <button type="submit" class="primary">{{ t.save_changes }}</button>
+</form>
+<p class="center"><a href="{{ url_for('stock') }}">{{ t.back }}</a></p>
+
+<section class="danger-zone">
+  <h2>{{ t.delete_title }}</h2>
+  <p class="sub">{{ t.delete_hint }}</p>
+  <form method="post" action="{{ url_for('delete_product', product_id=p.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required> {{ t.delete_confirm }}</label>
+    <button type="submit" class="danger wide">{{ t.delete_button }}</button>
+  </form>
+</section>
+{% endblock %}

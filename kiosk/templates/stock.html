@@ -10,7 +10,7 @@
 
 {% if products %}
 <table>
-  <thead><tr><th>{{ t.col_product }}</th><th class="num">{{ t.col_price }}</th><th class="num">{{ t.col_qty }}</th></tr></thead>
+  <thead><tr><th>{{ t.col_product }}</th><th class="num">{{ t.col_price }}</th><th class="num">{{ t.col_qty }}</th><th></th></tr></thead>
   <tbody>
   {% for p in products %}
     <tr>
@@ -20,6 +20,7 @@
       </td>
       <td class="num">{{ p.price | kes }}</td>
       <td class="num">{{ p.quantity }}</td>
+      <td class="num"><a href="{{ url_for('edit_product', product_id=p.id) }}" aria-label="{{ t.edit }} {{ p.name }}">{{ t.edit }}</a></td>
     </tr>
   {% endfor %}
   </tbody>

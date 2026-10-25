@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t.shopping_list }}</h1>
+<p class="sub">{{ user.kiosk_name }} · {{ today }}</p>
+{% if low %}
+<table>
+  <thead><tr><th>{{ t.col_product }}</th><th class="num">{{ t.col_qty }}</th></tr></thead>
+  <tbody>
+  {% for p in low %}
+    <tr><td>{{ p.name }}</td><td class="num">{{ p.quantity }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="center noprint"><button type="button" data-print>{{ t.print }}</button></p>
+{% else %}
+  <p class="empty">{{ t.low_none }}</p>
+{% endif %}
+<p class="center noprint"><a href="{{ url_for('home') }}">{{ t.back }}</a></p>
+{% endblock %}

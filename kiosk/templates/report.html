@@ -31,4 +31,6 @@
 {% else %}
   <p class="empty">{{ t.no_sales }}</p>
 {% endif %}
+
+<p class="center"><a href="{{ url_for('report_csv', period=period) }}">{{ t.export_csv }}</a></p>
 {% endblock %}

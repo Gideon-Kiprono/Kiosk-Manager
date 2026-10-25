@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t.dash_title }}</h1>
+
+<section class="hero">
+  <span>{{ t.today_revenue }}</span>
+  <strong>KES {{ today_revenue | kes }}</strong>
+</section>
+
+<section class="chart-card">
+  <h2>{{ t.chart_title }}</h2>
+  <p class="sub">{{ t.week_revenue }}: KES {{ week_revenue | kes }}</p>
+  {% if chart_svg %}
+    <div class="chart">{{ chart_svg }}</div>
+    <details>
+      <summary>{{ t.show_table }}</summary>
+      <table class="mini">
+        <thead><tr><th>{{ t.col_day }}</th><th class="num">{{ t.col_qty }}</th><th class="num">{{ t.col_total }}</th></tr></thead>
+        <tbody>
+        {% for d in days | reverse %}
+          <tr><td>{{ day_label(d.date) }}</td><td class="num">{{ d.units }}</td><td class="num">{{ d.revenue | kes }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  {% else %}
+    <p class="empty">{{ t.no_chart }}</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>{{ t.low_title }}</h2>
+  {% if low %}
+    <ul class="list">
+      {% for p in low %}
+      <li>
+        <span>{{ p.name }}
+          {% if p.quantity == 0 %}<span class="tag out">{{ t.out }}</span>{% else %}<span class="tag low">{{ p.quantity }}</span>{% endif %}
+        </span>
+        <a href="{{ url_for('add', bidhaa=p.name) }}">{{ t.refill }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+    <p><a href="{{ url_for('shopping_list') }}">{{ t.shopping_list }}</a></p>
+  {% else %}
+    <p class="empty">{{ t.low_none }}</p>
+  {% endif %}
+</section>
+{% endblock %}
