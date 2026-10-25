@@ -7,7 +7,7 @@ Stock and sales management for a small kiosk. Started as a command-line capstone
 - [x] Stage 1: project structure, business logic as reusable functions, SQLite database, tests
 - [x] Stage 2: Flask web app in Swahili (stock, sell, add/restock, report, search)
 - [x] Stage 3: accounts (sign-up, login, demo), each kiosk sees only its own data
-- [ ] Stage 4: dashboard, charts, polish
+- [x] Stage 4: dashboard with 7-day chart, low-stock list, edit/remove products, CSV export
 - [ ] Stage 5: deployment
 
 ## Run the tests
@@ -19,6 +19,18 @@ Stock and sales management for a small kiosk. Started as a command-line capstone
     kiosk/        business logic (db.py, services.py), no input() or print()
     tests/        unit tests
     legacy/       the original command-line version, kept for reference
+
+## Pages
+
+| Page | What it does |
+|---|---|
+| Mwanzo (`/`) | Today's revenue, 7-day sales chart (tap a bar for its value), low-stock list |
+| Stoo (`/stoo`) | Stock list with search; edit or remove a product |
+| Uza / Ongeza | Sell, and add or restock |
+| Ripoti (`/ripoti`) | Sales report for today or all time, with CSV download |
+| Orodha ya kununua (`/zinaisha`) | Printable list of low-stock items for the wholesaler |
+
+Removing a product hides it but keeps its past sales, so reports stay correct.
 
 ## Run the website locally
 
