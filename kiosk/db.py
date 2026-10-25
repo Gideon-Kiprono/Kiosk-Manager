@@ -21,6 +21,7 @@ CREATE TABLE {n} (
     name     TEXT    NOT NULL,
     price    INTEGER NOT NULL CHECK (price > 0),
     quantity INTEGER NOT NULL CHECK (quantity >= 0),
+    archived INTEGER NOT NULL DEFAULT 0,
     UNIQUE (user_id, name)
 );
 """
@@ -76,6 +77,10 @@ def init_db(conn):
     old = _columns(conn, "products")
     if old and "user_id" not in old:
         _migrate_to_accounts(conn)
+    cols = _columns(conn, "products")
+    if cols and "archived" not in cols:
+        # Stage 3 databases: "removed" products are hidden, not deleted, so old sales keep their history.
+        conn.execute("ALTER TABLE products ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
     conn.executescript(
         USERS
         + PRODUCTS.format(n="IF NOT EXISTS products")
