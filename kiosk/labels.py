@@ -3,6 +3,7 @@ dictionary and pick one by language setting."""
 
 SW = {
     "app_name": "Kiosk Manager",
+    "nav_home": "Mwanzo",
     "nav_stock": "Stoo",
     "nav_sell": "Uza",
     "nav_add": "Ongeza",
@@ -82,6 +83,34 @@ SW = {
     "err_invalid_kiosk_name": "Weka jina la duka.",
     "err_too_many_attempts": "Umejaribu mara nyingi. Subiri dakika 15.",
     "err_csrf": "Ombi halikuthibitishwa. Jaribu tena.",
+
+    "dash_title": "Mwanzo",
+    "today_revenue": "Mapato ya leo",
+    "week_revenue": "Siku 7 zilizopita",
+    "chart_title": "Mapato kwa siku (KES)",
+    "no_chart": "Hakuna mauzo kwa siku 7 zilizopita.",
+    "show_table": "Onyesha jedwali",
+    "col_day": "Siku",
+    "low_title": "Zinaisha",
+    "low_none": "Hakuna bidhaa zinazoisha.",
+    "refill": "Jaza",
+    "shopping_list": "Orodha ya kununua",
+    "print": "Chapisha",
+    "back": "Rudi",
+    "edit": "Hariri",
+    "edit_title": "Hariri bidhaa",
+    "save_changes": "Hifadhi mabadiliko",
+    "stock_label": "Idadi iliyopo",
+    "delete_title": "Futa bidhaa",
+    "delete_button": "Futa bidhaa",
+    "delete_confirm": "Ninathibitisha kufuta bidhaa hii",
+    "delete_hint": "Mauzo ya zamani yatabaki kwenye ripoti.",
+    "saved_ok": "Mabadiliko yamehifadhiwa.",
+    "deleted_ok": "{product} imefutwa.",
+    "export_csv": "Pakua CSV",
+    "csv_header": ["Wakati", "Bidhaa", "Idadi", "Jumla (KES)"],
+    "err_product_exists": "Bidhaa yenye jina hilo ipo tayari.",
+    "err_invalid_stock": "Idadi lazima iwe namba nzima, 0 au zaidi.",
 }
 
 

@@ -69,9 +69,14 @@ def purge_old_demos(conn):
         conn.execute("DELETE FROM users WHERE is_demo = 1 AND created_at < datetime('now', ?)", age)
 
 
-DEMO_STOCK = [("Mkate", 65, 40), ("Maziwa", 60, 30), ("Sukari", 150, 15),
-              ("Mayai", 20, 60), ("Chai Majani", 120, 12), ("Mandazi", 10, 50)]
-DEMO_SALES = [("Mkate", 6), ("Maziwa", 4), ("Mayai", 12), ("Mandazi", 15), ("Sukari", 2)]
+DEMO_STOCK = [("Mkate", 65, 40), ("Maziwa", 60, 30), ("Sukari", 150, 7),
+              ("Mayai", 20, 60), ("Chai Majani", 120, 6), ("Mandazi", 10, 50)]
+# (days ago, product, quantity): a believable week, so the dashboard chart has something to show
+DEMO_SALES = [(6, "Mkate", 5), (6, "Mandazi", 8), (5, "Maziwa", 4), (5, "Mayai", 10),
+              (4, "Mkate", 6), (4, "Sukari", 2), (4, "Mandazi", 10), (3, "Maziwa", 5),
+              (3, "Mayai", 12), (2, "Mkate", 8), (2, "Mandazi", 12), (2, "Chai Majani", 2),
+              (1, "Mayai", 15), (1, "Maziwa", 6), (1, "Sukari", 3),
+              (0, "Mkate", 4), (0, "Mandazi", 9), (0, "Mayai", 6)]
 
 
 def create_demo(conn):
@@ -81,6 +86,10 @@ def create_demo(conn):
                        secrets.token_urlsafe(16), "Duka la Demo", is_demo=True)
     for name, price, qty in DEMO_STOCK:
         services.add_or_restock(conn, user_id, name, qty, price)
-    for name, qty in DEMO_SALES:
+    for days_ago, name, qty in DEMO_SALES:
         services.sell(conn, user_id, name, qty)
+        conn.execute("UPDATE sales SET sold_at = datetime('now', ?) "
+                     "WHERE id = (SELECT max(id) FROM sales WHERE user_id = ?)",
+                     (f"-{days_ago} days", user_id))
+    conn.commit()
     return user_id
