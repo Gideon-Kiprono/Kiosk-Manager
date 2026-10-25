@@ -74,7 +74,41 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(services.list_products(self.conn, demo), [])
 
 
+class ChartTests(unittest.TestCase):
+    def test_chart_has_one_bar_per_day_and_labels_peak_once(self):
+        from kiosk import chart
+        days = [{"date": f"2026-10-{19 + i}", "revenue": r, "units": 1}
+                for i, r in enumerate([0, 500, 1200, 0, 1200, 300, 80])]
+        svg = str(chart.sales_bars(days, "Test"))
+        self.assertEqual(svg.count('class="bar"'), 7)
+        self.assertEqual(svg.count('class="value-text"'), 1)
+        self.assertEqual(svg.count('class="mark"'), 5)           # zero days draw no bar
+        self.assertEqual(str(chart.sales_bars(days[:1], "Test")), "")   # no sales: no chart
+
+    def test_nice_ticks(self):
+        from kiosk import chart
+        self.assertEqual(chart.nice_ticks(1320), [0, 500, 1000, 1500])
+        self.assertEqual(chart.nice_ticks(7)[0], 0)
+        self.assertGreaterEqual(chart.nice_ticks(7)[-1], 7)
+
+
 class MigrationTests(unittest.TestCase):
+    def test_stage3_database_gets_archived_column(self):
+        c = get_connection(":memory:")
+        c.executescript("""
+            CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, password_hash TEXT, kiosk_name TEXT,
+                is_demo INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
+            CREATE TABLE products (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT NOT NULL,
+                price INTEGER NOT NULL, quantity INTEGER NOT NULL, UNIQUE (user_id, name));
+            CREATE TABLE sales (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, product_id INTEGER NOT NULL,
+                product_name TEXT NOT NULL, quantity INTEGER NOT NULL, total INTEGER NOT NULL,
+                sold_at TEXT NOT NULL DEFAULT (datetime('now')));
+            INSERT INTO products (user_id, name, price, quantity) VALUES (1, 'Pen', 65, 5);
+        """)
+        init_db(c)
+        self.assertEqual(c.execute("SELECT archived FROM products").fetchone()[0], 0)
+        c.close()
+
     def test_stage2_database_is_upgraded_without_losing_data(self):
         tmp = tempfile.mkdtemp()
         try:
